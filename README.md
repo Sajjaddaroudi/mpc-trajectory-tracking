@@ -1,26 +1,47 @@
 # Classical Longitudinal-Lateral MPC for Autonomous Driving
 
-A research-oriented implementation of classical Model Predictive Control (MPC) for autonomous vehicle trajectory tracking using the KITTI raw autonomous driving dataset.
+A research-oriented Python implementation of classical Model Predictive Control
+(MPC) for autonomous vehicle trajectory tracking on the KITTI raw dataset.
 
-This project implements a combined longitudinal and lateral MPC controller based on a kinematic bicycle model. The controller tracks a reference trajectory while generating smooth steering and acceleration commands under vehicle dynamics and actuator constraints.
+This repository implements a combined longitudinal and lateral controller using
+a kinematic bicycle model. The MPC tracks a reference trajectory generated from
+KITTI ego-motion data while producing smooth steering and acceleration commands
+under vehicle constraints.
 
-The goal of this repository is to build a strong classical-control baseline before integrating learned perception, latent trajectory prediction, and learning-based control models.
+The project is intended to serve as a classical-control baseline before adding
+learned perception, latent trajectory prediction, and learning-based control.
 
----
+## Table of Contents
 
-# Project Motivation
+- [Motivation](#motivation)
+- [Method Overview](#method-overview)
+- [Vehicle Model](#vehicle-model)
+- [MPC Objective](#mpc-objective)
+- [Dataset](#dataset)
+- [Installation](#installation)
+- [Running the Experiment](#running-the-experiment)
+- [Results](#results)
+- [Repository Structure](#repository-structure)
+- [Current Status](#current-status)
+- [Future Work](#future-work)
 
-A large amount of modern autonomous-driving research focuses heavily on deep learning and end-to-end policies. However, optimization-based control methods such as MPC remain important because they provide:
+## Motivation
 
-- physically feasible control
+Modern autonomous-driving research often emphasizes deep learning and
+end-to-end policies. Classical optimization-based control is still important
+because it provides:
+
+- physically feasible control inputs
 - smooth actuator behavior
-- explicit handling of constraints
-- interpretable optimization objectives
+- explicit constraint handling
+- interpretable objective terms
 - stable trajectory tracking
 
-In this project, the controller receives a reference trajectory derived from KITTI ego-motion data and solves a finite-horizon nonlinear optimization problem at every timestep to determine the optimal steering and acceleration commands.
+In this project, the controller receives a reference trajectory derived from
+KITTI OXTS ego-motion data and solves a finite-horizon nonlinear optimization
+problem at every timestep.
 
-This repository is intended as the control foundation for future work involving:
+The long-term research direction is:
 
 ```text
 camera frames
@@ -29,11 +50,29 @@ camera frames
 -> MPC trajectory tracking
 ```
 
----
+## Method Overview
 
-# Vehicle Model
+The pipeline is:
 
-The controller uses a discrete-time kinematic bicycle model with state
+```text
+KITTI OXTS packets
+-> local Cartesian trajectory
+-> reference trajectory generation
+-> nonlinear MPC optimization
+-> steering and acceleration commands
+-> evaluation and plots
+```
+
+The controller is combined longitudinal-lateral MPC:
+
+- lateral control is handled through steering angle
+- longitudinal control is handled through acceleration
+- the predicted state includes planar position, heading, and velocity
+- steering affects yaw, and yaw propagates future x-y motion
+
+## Vehicle Model
+
+The MPC state is:
 
 $$
 \mathbf{x}_k =
@@ -42,7 +81,7 @@ p_{x,k} & p_{y,k} & v_k & \psi_k
 \end{bmatrix}^{\mathsf{T}}
 $$
 
-and control input
+The control input is:
 
 $$
 \mathbf{u}_k =
@@ -51,58 +90,48 @@ $$
 \end{bmatrix}^{\mathsf{T}}
 $$
 
-The prediction dynamics are:
+The controller uses the discrete-time kinematic bicycle model:
 
 $$
 \begin{aligned}
 p_{x,k+1} &= p_{x,k} + v_k \cos(\psi_k)\Delta t \\
 p_{y,k+1} &= p_{y,k} + v_k \sin(\psi_k)\Delta t \\
-v_{k+1} &= v_k + a_k \Delta t \\
+v_{k+1} &= v_k + a_k\Delta t \\
 \psi_{k+1} &= \psi_k + \frac{v_k}{L}\tan(\delta_k)\Delta t
 \end{aligned}
 $$
 
 where:
 
-- $p_x, p_y$: vehicle position in the local Cartesian frame
-- $\psi$: vehicle heading/yaw
-- $v$: longitudinal velocity
-- $a$: acceleration command
-- $\delta$: steering command
-- `L`: wheelbase
-- $\Delta t$: sampling time
+| Symbol | Meaning |
+| --- | --- |
+| $p_x, p_y$ | vehicle position in the local Cartesian frame |
+| $\psi$ | vehicle heading/yaw |
+| $v$ | longitudinal velocity |
+| $\delta$ | steering angle |
+| $a$ | acceleration command |
+| $L$ | wheelbase |
+| $\Delta t$ | sampling time |
 
-This formulation gives the controller true lateral authority: steering changes heading, and heading propagates future `px` and `py` motion.
+## MPC Objective
 
----
-
-# MPC Objective
-
-At each timestep, the controller optimizes a finite-horizon cost function that penalizes:
-
-- trajectory tracking error
-- heading error
-- velocity tracking error
-- steering effort
-- acceleration effort
-- abrupt steering changes
-- abrupt acceleration changes
-- terminal position error
-
-The optimization problem is:
+At each timestep, the controller solves a finite-horizon optimization problem
+over the predicted state sequence $\mathbf{X}$ and control sequence
+$\mathbf{U}$.
 
 $$
 \begin{aligned}
 \min_{\mathbf{X}, \mathbf{U}} \quad
 &\sum_{k=0}^{N-1}
-Q_p \lVert \mathbf{p}_k - \mathbf{p}_{k}^{\mathrm{ref}} \rVert_2^2
-+ Q_v (v_k - v_{k}^{\mathrm{ref}})^2 \\
-&+ Q_{\psi}\operatorname{wrap}(\psi_k - \psi_{k}^{\mathrm{ref}})^2
+Q_p \left\lVert \mathbf{p}_k - \mathbf{p}^{\mathrm{ref}}_k \right\rVert_2^2
++ Q_v \left(v_k - v^{\mathrm{ref}}_k\right)^2 \\
+&+ Q_{\psi}\operatorname{wrap}
+\left(\psi_k - \psi^{\mathrm{ref}}_k\right)^2
 + R_{\delta}\delta_k^2
 + R_a a_k^2 \\
-&+ R_{\Delta\delta}(\delta_k - \delta_{k-1})^2
-+ R_{\Delta a}(a_k - a_{k-1})^2 \\
-&+ Q_f \lVert \mathbf{p}_N - \mathbf{p}_{N}^{\mathrm{ref}} \rVert_2^2
+&+ R_{\Delta\delta}\left(\delta_k - \delta_{k-1}\right)^2
++ R_{\Delta a}\left(a_k - a_{k-1}\right)^2 \\
+&+ Q_f \left\lVert \mathbf{p}_N - \mathbf{p}^{\mathrm{ref}}_N \right\rVert_2^2
 \end{aligned}
 $$
 
@@ -116,23 +145,19 @@ a_{\min} &\le a_k \le a_{\max}
 \end{aligned}
 $$
 
-Only the first optimized control input is applied before the optimization is repeated at the next timestep. This is the standard receding-horizon MPC procedure.
+Only the first optimized control input is applied. The optimization is then
+shifted forward and solved again at the next timestep, which gives the standard
+receding-horizon MPC controller.
 
-The nonlinear optimization problem is implemented with CasADi and solved with IPOPT.
+## Dataset
 
----
-
-# Dataset
-
-Experiments use the KITTI raw autonomous-driving dataset.
-
-Current evaluations use:
+Experiments use the KITTI raw dataset sequence:
 
 ```text
 2011_09_26_drive_0011_sync
 ```
 
-Expected data layout:
+Expected local layout:
 
 ```text
 data/KITTI/
@@ -147,27 +172,25 @@ data/KITTI/
         +-- velodyne_points/
 ```
 
-The current classical MPC pipeline uses:
+The current classical MPC baseline uses:
 
 - `oxts/data/*.txt`
 - `oxts/timestamps.txt`
-- optionally `image_02/data/*.png` for camera availability checks and future vision work
+- optionally `image_02/data/*.png` for camera availability checks
 
-The OXTS measurements provide vehicle position, orientation, velocity, and ego-motion information. These are converted into a local Cartesian trajectory for MPC tracking.
+The calibration and camera folders are kept in the project layout for future
+vision-based extensions. More setup detail is available in
+[data/README_DATA.md](data/README_DATA.md).
 
-More detail is provided in [data/README_DATA.md](data/README_DATA.md).
+## Installation
 
----
-
-# Installation
-
-Create a Python environment and install dependencies:
+Install the Python dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-The project uses:
+Main dependencies:
 
 - NumPy
 - SciPy
@@ -177,9 +200,7 @@ The project uses:
 - PyYAML
 - tqdm
 
----
-
-# Running Experiments
+## Running the Experiment
 
 From the repository root:
 
@@ -193,118 +214,98 @@ On Windows, if `python` points to a different interpreter, use:
 py src/main.py
 ```
 
-The experiment configuration is stored in:
+Configuration is stored in:
 
 ```text
 configs/mpc_config.yaml
 ```
 
-The main tunable MPC parameters are:
+Important MPC parameters:
 
-- `mpc.horizon`
-- `mpc.weights.position`
-- `mpc.weights.yaw`
-- `mpc.weights.velocity`
-- `mpc.weights.steering`
-- `mpc.weights.acceleration`
-- `mpc.weights.steering_rate`
-- `mpc.weights.acceleration_rate`
-- `mpc.weights.terminal_position`
+| Config key | Role |
+| --- | --- |
+| `mpc.horizon` | prediction horizon length |
+| `mpc.weights.position` | x-y trajectory tracking weight |
+| `mpc.weights.yaw` | heading tracking weight |
+| `mpc.weights.velocity` | speed tracking weight |
+| `mpc.weights.steering` | steering effort penalty |
+| `mpc.weights.acceleration` | acceleration effort penalty |
+| `mpc.weights.steering_rate` | steering smoothness penalty |
+| `mpc.weights.acceleration_rate` | acceleration smoothness penalty |
+| `mpc.weights.terminal_position` | terminal position tracking weight |
 
----
+## Results
 
-# Results
+The default configuration is manually tuned for the first 220 frames of
+`2011_09_26_drive_0011_sync`.
 
-The controller demonstrates stable trajectory tracking across both longitudinal and lateral motion. The generated steering and acceleration commands remain physically realistic while maintaining low tracking error throughout the trajectory.
+| Metric | Value |
+| --- | ---: |
+| trajectory RMSE | `0.027688 m` |
+| lateral RMSE | `0.013462 m` |
+| max lateral error | `0.044503 m` |
+| heading RMSE | `0.014823 rad` |
+| velocity RMSE | `0.238742 m/s` |
+| steering smoothness | `0.000024` |
+| solver success rate | `1.000000` |
 
-The default configuration is manually tuned for `2011_09_26_drive_0011_sync` over the first 220 frames.
+The results show centimeter-scale lateral tracking, stable heading tracking,
+and smooth steering behavior. Velocity tracking is stable, with a small initial
+transient due to the first MPC solve having no previous applied control history.
 
-Reference run metrics:
+### Trajectory Tracking
 
-```text
-trajectory_rmse_m: 0.027688
-lateral_rmse_m: 0.013462
-max_lateral_error_m: 0.044503
-heading_rmse_rad: 0.014823
-velocity_rmse_mps: 0.238742
-steering_smoothness: 0.000024
-solver_success_rate: 1.000000
-```
+The MPC rollout closely follows the KITTI reference trajectory.
 
----
+![Trajectory tracking](outputs/plots/trajectory_tracking.png)
 
-## Trajectory Tracking
+### Velocity Tracking
 
-The MPC trajectory closely follows the reference trajectory with small deviations during higher-curvature sections of the path.
+The longitudinal controller follows the reference speed without high-frequency
+oscillation.
 
-![Trajectory Tracking](outputs/plots/trajectory_tracking.png)
+![Velocity tracking](outputs/plots/velocity_tracking.png)
 
-The controller maintains accurate path following while also satisfying steering, acceleration, and velocity constraints.
+### Lateral Tracking Error
 
----
+Signed lateral error is computed in the reference path frame by projecting
+position error onto the normal direction of the reference heading.
 
-## Velocity Tracking
+![Lateral tracking error](outputs/plots/lateral_error.png)
 
-The longitudinal controller tracks the reference velocity smoothly without high-frequency oscillatory behavior.
+### Heading Error
 
-![Velocity Tracking](outputs/plots/velocity_tracking.png)
+Heading error remains bounded and does not show high-frequency oscillation.
 
-The current tuned configuration prioritizes lateral and heading tracking while keeping velocity tracking stable. A small initial velocity transient may remain because the first solve has no previous applied control history.
+![Heading error](outputs/plots/heading_error.png)
 
----
+### Control Commands
 
-## Lateral Tracking Error
+The optimized steering and acceleration commands remain smooth and physically
+plausible.
 
-Most of the trajectory remains within a very small lateral tracking error range.
+![Control commands](outputs/plots/control_commands.png)
 
-![Lateral Error](outputs/plots/lateral_error.png)
+### Overall Tracking Error
 
-The signed lateral error is computed in the reference path frame by projecting position error onto the normal direction of the reference heading. This separates cross-track error from along-track timing error.
+The Euclidean tracking error remains bounded over the rollout.
 
----
+![Tracking error](outputs/plots/tracking_error.png)
 
-## Heading Error
-
-Heading tracking remains stable throughout the trajectory without high-frequency oscillations.
-
-![Heading Error](outputs/plots/heading_error.png)
-
-The largest heading deviations occur mainly during higher-curvature segments of the reference path.
-
----
-
-## Control Commands
-
-The generated steering and acceleration commands remain smooth and physically plausible.
-
-![Control Commands](outputs/plots/control_commands.png)
-
-The steering controller avoids excessive oscillation while maintaining accurate trajectory tracking.
-
----
-
-## Tracking Error
-
-Overall tracking error remains bounded and stable during the rollout.
-
-![Tracking Error](outputs/plots/tracking_error.png)
-
----
-
-# Repository Structure
+## Repository Structure
 
 ```text
 src/
-+-- data_loader/          KITTI OXTS parsing, timestamps, coordinate transforms
++-- data_loader/          KITTI OXTS parsing and coordinate transforms
 +-- vehicle_model/        kinematic bicycle model and vehicle constraints
 +-- trajectory/           reference generation and steering estimation
-+-- mpc/                  CasADi optimizer, objective, and controller
-+-- evaluation/           lateral, heading, velocity, smoothness, and energy metrics
++-- mpc/                  CasADi optimizer and receding-horizon controller
++-- evaluation/           lateral, heading, velocity, and smoothness metrics
 +-- visualization/        trajectory, control, velocity, and error plots
-+-- future_extensions/    camera latent and latent-MPC placeholders
++-- future_extensions/    placeholders for learned perception and latent MPC
 ```
 
-Generated experiment artifacts are saved to:
+Generated artifacts:
 
 ```text
 outputs/
@@ -313,33 +314,28 @@ outputs/
 +-- videos/
 ```
 
-The MPC architecture audit is saved at:
+The architecture audit is saved at:
 
 ```text
 results/mpc_architecture_audit.md
 ```
 
----
+## Current Status
 
-# Current Status
+This project currently focuses on classical control and assumes:
 
-At the current stage, this project focuses entirely on classical control and assumes access to:
+- known ego state from KITTI OXTS data
+- known future reference trajectory
+- no learned perception
+- no obstacle constraints
+- no ROS dependency
 
-- accurate vehicle state estimation
-- a known reference trajectory
-- KITTI OXTS ego-motion data
+The current controller is a strong baseline for later comparison against
+learned trajectory prediction or latent-space control.
 
-The system does not yet include learned perception or trajectory prediction.
+## Future Work
 
-However, the current MPC implementation provides a strong and stable baseline that can later be extended using camera-based learned trajectory generation.
-
----
-
-# Future Work
-
-The next major direction of this project is integrating learned visual representations into the control pipeline.
-
-The planned pipeline is:
+The planned research direction is:
 
 ```text
 camera frames
@@ -350,28 +346,21 @@ camera frames
 -> steering + acceleration
 ```
 
-Instead of relying on ground-truth future trajectories, the controller will eventually track trajectories predicted directly from visual information.
+Future extensions include:
 
-Additional future directions include:
-
-- latent-based future trajectory prediction
+- camera latent encoding
+- latent future trajectory prediction
 - uncertainty-aware MPC
 - camera-based road curvature estimation
-- nonlinear MPC with richer state constraints
 - dynamic bicycle models
 - obstacle-aware MPC constraints
-- learned trajectory refinement
+- learned residual dynamics
 - perception-control integration
 
----
+## Research Direction
 
-# Research Direction
-
-This repository is intended as a bridge between:
-
-- classical control theory
-- machine learning
-- predictive perception
-- autonomous-driving systems
-
-The long-term objective is to combine learned scene understanding with optimization-based control for robust and physically feasible autonomous navigation.
+This repository is intended as a bridge between classical control theory,
+machine learning, predictive perception, and autonomous-driving systems. The
+long-term objective is to combine learned scene understanding with
+optimization-based control for robust and physically feasible autonomous
+navigation.
