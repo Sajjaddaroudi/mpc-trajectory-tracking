@@ -1,0 +1,8 @@
+Place the extracted KITTI raw date folder here:
+
+data/KITTI/2011_09_26/
+├── 2011_09_26_calib/
+└── 2011_09_26_drive_0011_sync/
+
+The classical MPC baseline initially consumes oxts/data/*.txt and oxts/timestamps.txt.
+image_02/data/*.png is optional for the current controller and reserved for future vision work.

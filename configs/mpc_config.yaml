@@ -1,0 +1,48 @@
+project:
+  name: kitti-classical-mpc
+  random_seed: 7
+
+paths:
+  data_root: data/KITTI
+  date: "2011_09_26"
+  drive: "2011_09_26_drive_0011_sync"
+  output_root: outputs
+
+data:
+  max_frames: 220
+  use_synthetic_if_missing: true
+  synthetic_points: 180
+  camera: image_02
+
+vehicle:
+  wheelbase_m: 2.71
+  min_velocity_mps: 0.0
+  max_velocity_mps: 35.0
+  max_steering_rad: 0.50
+  max_acceleration_mps2: 3.0
+  min_acceleration_mps2: -5.0
+
+mpc:
+  horizon: 16
+  dt: 0.10
+  max_iterations: 80
+  ipopt_print_level: 0
+  print_time: false
+  weights:
+    position: 17.0
+    velocity: 2.0
+    yaw: 6.0
+    steering: 0.25
+    acceleration: 0.15
+    steering_rate: 2.2
+    acceleration_rate: 0.50
+    terminal_position: 34.0
+
+reference:
+  smoothing_window: 5
+  minimum_speed_mps: 0.1
+
+visualization:
+  dpi: 180
+  show_plots: false
+  animate: false
