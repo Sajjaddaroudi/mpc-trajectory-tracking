@@ -119,23 +119,38 @@ At each timestep, the controller solves a finite-horizon optimization problem
 over the predicted state sequence $\mathbf{X}$ and control sequence
 $\mathbf{U}$.
 
+Define the tracking errors:
+
 $$
 \begin{aligned}
-\min_{\mathbf{X}, \mathbf{U}} \quad
-&\sum_{k=0}^{N-1}
-\Big[
-Q_p \left\lVert \mathbf{p}_k - \mathbf{p}^{\mathrm{ref}}_k \right\rVert_2^2
-{}+ Q_v \left(v_k - v^{\mathrm{ref}}_k\right)^2 \\
-&\qquad
-{}+ Q_{\psi}\operatorname{wrap}\left(\psi_k - \psi^{\mathrm{ref}}_k\right)^2
-{}+ R_{\delta}\delta_k^2
-{}+ R_a a_k^2 \\
-&\qquad
-{}+ R_{\Delta\delta}\left(\delta_k - \delta_{k-1}\right)^2
-{}+ R_{\Delta a}\left(a_k - a_{k-1}\right)^2
-\Big] \\
+\mathbf{e}_{p,k} &= \mathbf{p}_k - \mathbf{p}^{\mathrm{ref}}_k \\
+e_{v,k} &= v_k - v^{\mathrm{ref}}_k \\
+e_{\psi,k} &= \mathrm{atan2}
+\left(
+\sin(\psi_k - \psi^{\mathrm{ref}}_k),
+\cos(\psi_k - \psi^{\mathrm{ref}}_k)
+\right)
+\end{aligned}
+$$
+
+The MPC minimizes:
+
+$$
+\begin{aligned}
+J =
+\sum_{k=0}^{N-1}
+&\Big(
+Q_p \left\lVert \mathbf{e}_{p,k} \right\rVert_2^2
+{}+ Q_v e_{v,k}^2
+{}+ Q_{\psi} e_{\psi,k}^2 \\
 &\quad
-{}+ Q_f \left\lVert \mathbf{p}_N - \mathbf{p}^{\mathrm{ref}}_N \right\rVert_2^2
+{}+ R_{\delta}\delta_k^2
+{}+ R_a a_k^2
+{}+ R_{\Delta\delta}(\delta_k - \delta_{k-1})^2 \\
+&\quad
+{}+ R_{\Delta a}(a_k - a_{k-1})^2
+\Big)
+{}+ Q_f \left\lVert \mathbf{e}_{p,N} \right\rVert_2^2
 \end{aligned}
 $$
 
