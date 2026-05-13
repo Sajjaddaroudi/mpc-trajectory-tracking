@@ -35,34 +35,42 @@ camera frames
 
 The controller uses a discrete-time kinematic bicycle model with state
 
-```text
-x = [px, py, v, psi]
-```
+$$
+\mathbf{x}_k =
+\begin{bmatrix}
+p_{x,k} & p_{y,k} & v_k & \psi_k
+\end{bmatrix}^{\mathsf{T}}
+$$
 
 and control input
 
-```text
-u = [delta, a]
-```
+$$
+\mathbf{u}_k =
+\begin{bmatrix}
+\delta_k & a_k
+\end{bmatrix}^{\mathsf{T}}
+$$
 
 The prediction dynamics are:
 
-```text
-px_{k+1}  = px_k + v_k cos(psi_k) dt
-py_{k+1}  = py_k + v_k sin(psi_k) dt
-v_{k+1}   = v_k + a_k dt
-psi_{k+1} = psi_k + (v_k / L) tan(delta_k) dt
-```
+$$
+\begin{aligned}
+p_{x,k+1} &= p_{x,k} + v_k \cos(\psi_k)\Delta t \\
+p_{y,k+1} &= p_{y,k} + v_k \sin(\psi_k)\Delta t \\
+v_{k+1} &= v_k + a_k \Delta t \\
+\psi_{k+1} &= \psi_k + \frac{v_k}{L}\tan(\delta_k)\Delta t
+\end{aligned}
+$$
 
 where:
 
-- `px, py`: vehicle position in the local Cartesian frame
-- `psi`: vehicle heading/yaw
-- `v`: longitudinal velocity
-- `a`: acceleration command
-- `delta`: steering command
+- $p_x, p_y$: vehicle position in the local Cartesian frame
+- $\psi$: vehicle heading/yaw
+- $v$: longitudinal velocity
+- $a$: acceleration command
+- $\delta$: steering command
 - `L`: wheelbase
-- `dt`: sampling time
+- $\Delta t$: sampling time
 
 This formulation gives the controller true lateral authority: steering changes heading, and heading propagates future `px` and `py` motion.
 
@@ -83,26 +91,30 @@ At each timestep, the controller optimizes a finite-horizon cost function that p
 
 The optimization problem is:
 
-```text
-minimize over X, U:
-
-sum_k Q_p ||p_k - p_ref,k||^2
-    + Q_v (v_k - v_ref,k)^2
-    + Q_psi wrap(psi_k - psi_ref,k)^2
-    + R_delta delta_k^2
-    + R_a a_k^2
-    + R_d_delta (delta_k - delta_{k-1})^2
-    + R_d_a (a_k - a_{k-1})^2
-    + Q_terminal ||p_N - p_ref,N||^2
-```
+$$
+\begin{aligned}
+\min_{\mathbf{X}, \mathbf{U}} \quad
+&\sum_{k=0}^{N-1}
+Q_p \lVert \mathbf{p}_k - \mathbf{p}_{k}^{\mathrm{ref}} \rVert_2^2
++ Q_v (v_k - v_{k}^{\mathrm{ref}})^2 \\
+&+ Q_{\psi}\operatorname{wrap}(\psi_k - \psi_{k}^{\mathrm{ref}})^2
++ R_{\delta}\delta_k^2
++ R_a a_k^2 \\
+&+ R_{\Delta\delta}(\delta_k - \delta_{k-1})^2
++ R_{\Delta a}(a_k - a_{k-1})^2 \\
+&+ Q_f \lVert \mathbf{p}_N - \mathbf{p}_{N}^{\mathrm{ref}} \rVert_2^2
+\end{aligned}
+$$
 
 subject to:
 
-```text
-v_min <= v_k <= v_max
-|delta_k| <= delta_max
-a_min <= a_k <= a_max
-```
+$$
+\begin{aligned}
+v_{\min} &\le v_k \le v_{\max} \\
+|\delta_k| &\le \delta_{\max} \\
+a_{\min} &\le a_k \le a_{\max}
+\end{aligned}
+$$
 
 Only the first optimized control input is applied before the optimization is repeated at the next timestep. This is the standard receding-horizon MPC procedure.
 

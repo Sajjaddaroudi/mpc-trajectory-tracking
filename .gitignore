@@ -9,8 +9,6 @@ venv/
 env/
 
 data/KITTI/2011_09_26/
-outputs/plots/*
-outputs/logs/*
 outputs/videos/*
 
 !outputs/plots/.gitkeep

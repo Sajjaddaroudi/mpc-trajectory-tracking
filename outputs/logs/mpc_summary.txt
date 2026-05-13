@@ -1,0 +1,23 @@
+KITTI Classical MPC Experiment Summary
+========================================
+
+Metadata
+- project: kitti-classical-mpc
+- trajectory_source: kitti
+- sequence: 2011_09_26_drive_0011_sync
+- num_reference_states: 220
+- mpc_horizon: 16
+- dt_s: 0.1
+- camera_frames: 220
+- first_image_shape: 375x1242
+
+Metrics
+- trajectory_rmse_m: 0.027688
+- lateral_rmse_m: 0.013462
+- max_lateral_error_m: 0.044503
+- mean_heading_error_rad: 0.012354
+- heading_rmse_rad: 0.014823
+- velocity_rmse_mps: 0.238742
+- steering_smoothness: 0.000024
+- control_energy: 165.034528
+- solver_success_rate: 1.000000
